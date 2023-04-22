@@ -1,6 +1,5 @@
 force_debug ()
 
-
 #
 # test_mgwhelp
 #
@@ -16,6 +15,7 @@ add_test (
     NAME test_mgwhelp
     COMMAND test_mgwhelp
 )
+set_tests_properties(test_mgwhelp PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 #
 # test_mgwhelp_split
@@ -47,6 +47,7 @@ add_test (
     NAME test_mgwhelp_split
     COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_mgwhelp_split.exe
 )
+set_tests_properties(test_mgwhelp_split PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 
 #
@@ -82,7 +83,7 @@ add_test (
     NAME test_mgwhelp_split_subdir
     COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_mgwhelp_split_subdir.exe
 )
-
+set_tests_properties(test_mgwhelp_split_subdir PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 #
 # test_mgwhelp_stripped
@@ -105,6 +106,7 @@ add_test (
     NAME test_mgwhelp_stripped
     COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_mgwhelp_stripped.exe
 )
+set_tests_properties(test_mgwhelp_stripped PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 
 #
@@ -180,6 +182,7 @@ endif ()
 if (OBJCOPY_VERSION STREQUAL "llvm-objcopy")
     set_target_properties (test_mgwhelp_zdebug PROPERTIES EXCLUDE_FROM_ALL ON)
 else ()
+    set_tests_properties(test_mgwhelp_zdebug PROPERTIES FIXTURES_REQUIRED test_fixture)
 endif ()
 if (OBJCOPY_VERSION STREQUAL "llvm-objcopy" OR OBJCOPY_VERSION VERSION_LESS "2.34")
     set_tests_properties (test_mgwhelp_zdebug PROPERTIES DISABLED ON)
@@ -202,6 +205,7 @@ add_test (
     COMMAND test_exchndl_static_unicode
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
+set_tests_properties(test_exchndl_static_unicode PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 
 #
@@ -220,6 +224,7 @@ add_test (
     COMMAND test_exchndl_static_ansi
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
+set_tests_properties(test_exchndl_static_ansi PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 
 #
@@ -238,6 +243,7 @@ add_test (
     COMMAND test_exchndl_dynamic_unicode
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
+set_tests_properties(test_exchndl_dynamic_unicode PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 
 #
@@ -256,6 +262,7 @@ add_test (
     COMMAND test_exchndl_dynamic_ansi
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
+set_tests_properties(test_exchndl_dynamic_ansi PROPERTIES FIXTURES_REQUIRED test_fixture)
 
 
 #
@@ -270,3 +277,13 @@ add_test (
     COMMAND test_addr2line
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
+set_tests_properties(test_addr2line PROPERTIES FIXTURES_REQUIRED test_fixture)
+
+add_test(test_build
+    "${CMAKE_COMMAND}"
+    --build "${CMAKE_BINARY_DIR}"
+    --config "$<CONFIG>"
+    --target all
+)
+
+set_tests_properties(test_build PROPERTIES FIXTURES_SETUP test_fixture)
