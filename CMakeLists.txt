@@ -60,7 +60,7 @@ execute_process (
     OUTPUT_QUIET
     ERROR_QUIET
 )
-if (NOT STATUS_CXX11_THREADS EQUAL 0)
+if (NOT STATUS_CXX11_THREADS EQUAL 0 AND NOT MINGW)
     message (SEND_ERROR "Win32 threads required.")
 endif ()
 
