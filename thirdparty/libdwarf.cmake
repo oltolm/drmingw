@@ -24,6 +24,7 @@ configure_file (libdwarf/cmake/config.h.in
 
 # See libdwarf/src/lib/libdwarf/CMakeLists.txt
 add_library (dwarf STATIC
+    libdwarf/src/lib/libdwarf/dwarf_64machoread.c
     libdwarf/src/lib/libdwarf/dwarf_abbrev.c
     libdwarf/src/lib/libdwarf/dwarf_alloc.c
     libdwarf/src/lib/libdwarf/dwarf_arange.c
@@ -42,8 +43,9 @@ add_library (dwarf STATIC
     libdwarf/src/lib/libdwarf/dwarf_fill_in_attr_form.c
     libdwarf/src/lib/libdwarf/dwarf_find_sigref.c
     libdwarf/src/lib/libdwarf/dwarf_fission_to_cu.c
-    libdwarf/src/lib/libdwarf/dwarf_form.c
     libdwarf/src/lib/libdwarf/dwarf_form_class_names.c
+    libdwarf/src/lib/libdwarf/dwarf_form.c
+    libdwarf/src/lib/libdwarf/dwarf_frame_cfa_read.c
     libdwarf/src/lib/libdwarf/dwarf_frame.c
     libdwarf/src/lib/libdwarf/dwarf_frame2.c
     libdwarf/src/lib/libdwarf/dwarf_gdbindex.c
@@ -55,10 +57,12 @@ add_library (dwarf STATIC
     libdwarf/src/lib/libdwarf/dwarf_init_finish.c
     libdwarf/src/lib/libdwarf/dwarf_leb.c
     libdwarf/src/lib/libdwarf/dwarf_line.c
+    libdwarf/src/lib/libdwarf/dwarf_lname_version.c
     libdwarf/src/lib/libdwarf/dwarf_loc.c
     libdwarf/src/lib/libdwarf/dwarf_local_malloc.c
     libdwarf/src/lib/libdwarf/dwarf_locationop_read.c
     libdwarf/src/lib/libdwarf/dwarf_loclists.c
+    libdwarf/src/lib/libdwarf/dwarf_lvn_name.c
     libdwarf/src/lib/libdwarf/dwarf_machoread.c
     libdwarf/src/lib/libdwarf/dwarf_macro.c
     libdwarf/src/lib/libdwarf/dwarf_macro5.c
