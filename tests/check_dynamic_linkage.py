@@ -210,7 +210,9 @@ class ObjParser:
 
     export_address_binutils_re = re.compile(r'^\s+\[\s*(?P<idx>[0-9]+)\] \+base\[\s*(?P<ord>[0-9]+)\]\s+[0-9a-f]+\s+(?:Forwarder RVA -- (?P<alias>\S+)|Export RVA)$')
 
-    export_name_binutils_re = re.compile(r'^\s+\[\s*(?P<idx>[0-9]+)\] (?P<name>\S+)$')
+    export_name_binutils_header_re = re.compile(r'^\[Ordinal/Name Pointer\] Table(?:\s+--.*)?$')
+    export_name_binutils_re = re.compile(r'^\s+\[\s*(?P<idx>[0-9]+)\]\s+(?P<name>\S+)$')
+    export_name_binutils_ext_re = re.compile(r'^\s+\[\s*(?P<idx>[0-9]+)\]\s+\+base\[\s*(?P<ord>[0-9]+)\]\s+[0-9a-f]+\s+(?P<name>\S+)$')
     def parse_exports_binutils(self):
 
         addresses = {}
@@ -222,14 +224,23 @@ class ObjParser:
                 if alias is not None:
                     addresses[mo.group('idx')] = alias
 
-        self.consume('')
+        while not self.eof and not self.export_name_binutils_header_re.match(self.lookahead):
+            self.consume()
 
-        self.consume('[Ordinal/Name Pointer] Table')
+        if self.eof:
+            return
+
+        self.consume()
         symbols = []
         while self.lookahead:
             line = self.consume()
             mo = self.export_name_binutils_re.match(line)
-            assert mo
+            if mo is None:
+                mo = self.export_name_binutils_ext_re.match(line)
+            if mo is None:
+                if line.strip() in ('Ordinal   Hint Name', 'Ordinal Hint Name'):
+                    continue
+                continue
 
             name = mo.group('name')
             try:
