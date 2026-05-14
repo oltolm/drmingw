@@ -27,7 +27,7 @@ set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 find_package (WinDbg)
 
 include_directories (
-    ${CMAKE_SOURCE_DIR}/thirdparty/libiberty
+    ${PROJECT_SOURCE_DIR}/thirdparty/libiberty
 )
 
 add_subdirectory (thirdparty)
@@ -128,7 +128,7 @@ endmacro ()
 ##############################################################################
 # Targets
 
-enable_testing ()
+include(CTest)
 if (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
     add_custom_target (check)
 elseif (DEFINED CMAKE_BUILD_TYPE)
