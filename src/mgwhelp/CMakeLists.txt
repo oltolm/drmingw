@@ -25,11 +25,34 @@ target_sources (mgwhelp PRIVATE
     version.rc
 )
 
+# mgwhelp resolves DWARF and PE exports itself and forwards everything else to a
+# real dbghelp. Import that under a private name rather than dbghelp.dll: a file
+# called dbghelp.dll in an application directory shadows the OS copy for the whole
+# process, and system components that bind to dbghelp -- dbgeng.dll among them --
+# then fail to load against an older one. Shipping the forward target under its own
+# name keeps the OS dbghelp untouched.
+set (MGWHELP_DBGHELP_DLL "dbghelpms.dll" CACHE STRING
+     "File name of the dbghelp implementation mgwhelp forwards to")
+
+set (MGWHELP_DBGHELP_IMPLIB "${CMAKE_CURRENT_BINARY_DIR}/libmgwdbghelp.a")
+add_custom_command (
+    OUTPUT ${MGWHELP_DBGHELP_IMPLIB}
+    COMMAND ${CMAKE_DLLTOOL}
+            --dllname ${MGWHELP_DBGHELP_DLL}
+            --input-def ${CMAKE_CURRENT_SOURCE_DIR}/dbghelp.def
+            --output-lib ${MGWHELP_DBGHELP_IMPLIB}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/dbghelp.def
+    COMMENT "Generating import library for ${MGWHELP_DBGHELP_DLL}"
+    VERBATIM
+)
+add_custom_target (mgwhelp_dbghelp_implib DEPENDS ${MGWHELP_DBGHELP_IMPLIB})
+add_dependencies (mgwhelp mgwhelp_dbghelp_implib)
+
 target_link_libraries (mgwhelp PRIVATE
     common
     dwarf
     libiberty
-    dbghelp
+    ${MGWHELP_DBGHELP_IMPLIB}
     dwarfstack
 )
 
