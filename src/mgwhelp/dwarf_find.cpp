@@ -64,18 +64,14 @@ find_symbol_cbW(uint64_t addr,
 }
 
 bool
-dwarf_find_symbol(Dwarf_Debug dbg,
-                  void *cuArr,
-                  int cuQty,
-                  Dwarf_Addr image_base_vma,
+dwarf_find_symbol(dwst_module *module,
                   wchar_t *name,
                   Dwarf_Addr image_base,
                   Dwarf_Addr addr,
                   struct dwarf_symbol_info *info)
 {
     *info = {};
-    dwstOfDwarfDebugW(dbg, image_base_vma, name, image_base, &addr, 1, &find_symbol_cbW, info,
-                      cuArr, cuQty);
+    dwstOfModuleW(module, name, image_base, &addr, 1, &find_symbol_cbW, info);
     return !info->functionname.empty();
 }
 
@@ -106,18 +102,14 @@ find_line_cbW(uint64_t addr,
 }
 
 bool
-dwarf_find_line(Dwarf_Debug dbg,
-                void *cuArr,
-                int cuQty,
-                Dwarf_Addr image_base_vma,
+dwarf_find_line(dwst_module *module,
                 wchar_t *name,
                 Dwarf_Addr image_base,
                 Dwarf_Addr addr,
                 struct dwarf_line_info *info)
 {
     *info = {};
-    dwstOfDwarfDebugW(dbg, image_base_vma, name, image_base, &addr, 1, &find_line_cbW, info,
-                      cuArr, cuQty);
+    dwstOfModuleW(module, name, image_base, &addr, 1, &find_line_cbW, info);
 
     return !info->filename.empty();
 }
