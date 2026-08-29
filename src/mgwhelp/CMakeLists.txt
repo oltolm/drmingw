@@ -25,6 +25,7 @@ target_sources (mgwhelp PRIVATE
     version.rc
 )
 
+if(ENABLE_DBGHELPMS)
 # mgwhelp resolves DWARF and PE exports itself and forwards everything else to a
 # real dbghelp. Import that under a private name rather than dbghelp.dll: a file
 # called dbghelp.dll in an application directory shadows the OS copy for the whole
@@ -47,12 +48,13 @@ add_custom_command (
 )
 add_custom_target (mgwhelp_dbghelp_implib DEPENDS ${MGWHELP_DBGHELP_IMPLIB})
 add_dependencies (mgwhelp mgwhelp_dbghelp_implib)
+endif()
 
 target_link_libraries (mgwhelp PRIVATE
     common
     dwarf
     libiberty
-    ${MGWHELP_DBGHELP_IMPLIB}
+    "$<IF:$<BOOL:${ENABLE_DBGHELPMS}>,${MGWHELP_DBGHELP_IMPLIB},dbghelp>"
     dwarfstack
 )
 

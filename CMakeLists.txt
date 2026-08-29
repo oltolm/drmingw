@@ -14,6 +14,8 @@ project (drmingw
 
 option (ENABLE_COVERAGE "Enable code coverage." OFF)
 
+option (ENABLE_DBGHELPMS "Enable linking to dbghelpms.dll" ON)
+
 
 ##############################################################################
 # Dependencies
