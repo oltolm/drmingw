@@ -35,12 +35,14 @@ extern "C" {
 
 struct dwarf_symbol_info {
     std::string functionname;
+    Dwarf_Addr function_addr = 0;
     unsigned int offset_addr;
 };
 
 struct dwarf_line_info {
     std::wstring filename;
     unsigned int line = 0;
+    Dwarf_Addr line_addr = 0;
     unsigned int offset_addr;
 };
 
