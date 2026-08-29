@@ -17,6 +17,7 @@
  */
 
 
+#include "libdwarf.h"
 #include <assert.h>
 #include <cstdlib>
 #include <stddef.h>
@@ -50,7 +51,8 @@ struct mgwhelp_module {
 
     DWORD64 image_base_vma;
 
-    dwarf_module dwarf;
+    Dwarf_Debug dbg;
+    dwst_module *dwarf;
 };
 
 
@@ -290,9 +292,9 @@ mgwhelp_module_create(struct mgwhelp_process *process, HANDLE hFile, PCWSTR Imag
     module->image_base_vma = PEGetImageBase(module->lpFileBase);
 
     error = 0;
-    if (mgwhelp_dwarf_pe_init(hFile, module->LoadedImageName, 0, 0, &module->dwarf.dbg, &error) ==
+    if (mgwhelp_dwarf_pe_init(hFile, module->LoadedImageName, 0, 0, &module->dbg, &error) ==
         DW_DLV_OK) {
-        dwstReadCUs(module->dwarf.dbg, &module->dwarf.cuArr, &module->dwarf.cuQty);
+        module->dwarf = dwstModuleOpen(module->dbg, module->image_base_vma);
     }
 
     if (bOwnFile) {
@@ -320,10 +322,10 @@ no_module:
 static void
 mgwhelp_module_destroy(struct mgwhelp_module *module)
 {
-    if (module->dwarf.dbg) {
+    if (module->dbg) {
         Dwarf_Error error = 0;
-        dwstFreeCUs(module->dwarf.dbg, module->dwarf.cuArr, module->dwarf.cuQty);
-        mgwhelp_dwarf_pe_finish(module->dwarf.dbg, &error);
+        dwstModuleClose(module->dwarf);
+        mgwhelp_dwarf_pe_finish(module->dbg, &error);
     }
 
     UnmapViewOfFile(module->lpFileBase);
@@ -657,11 +659,10 @@ MgwSymFromAddrW(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL
     DWORD64 Offset;
     mgwhelp_module *module = mgwhelp_find_module(hProcess, Address, &Offset);
 
-    if (module && module->dwarf.dbg) {
+    if (module && module->dwarf) {
         struct dwarf_symbol_info info = {};
-        if (dwarf_find_symbol(module->dwarf.dbg, module->dwarf.cuArr, module->dwarf.cuQty,
-                              module->image_base_vma, module->LoadedImageName, module->Base,
-                              Address, &info)) {
+        if (dwarf_find_symbol(module->dwarf, module->LoadedImageName, module->Base, Address,
+                              &info)) {
             const char *name = info.functionname.c_str();
             if (dwOptions & SYMOPT_UNDNAME) {
                 char *output_buffer = demangle(name, UNDNAME_NAME_ONLY);
@@ -713,11 +714,9 @@ MgwSymGetLineFromAddrW64(HANDLE hProcess,
     DWORD64 Offset;
     mgwhelp_module *module = mgwhelp_find_module(hProcess, dwAddr, &Offset);
 
-    if (module && module->dwarf.dbg) {
+    if (module && module->dwarf) {
         struct dwarf_line_info info = {};
-        if (dwarf_find_line(module->dwarf.dbg, module->dwarf.cuArr, module->dwarf.cuQty,
-                            module->image_base_vma, module->LoadedImageName, module->Base, dwAddr,
-                            &info)) {
+        if (dwarf_find_line(module->dwarf, module->LoadedImageName, module->Base, dwAddr, &info)) {
             static wchar_t buf[1024];
             Line->FileName = buf;
             wcsncpy(buf, info.filename.c_str(), _countof(buf));
