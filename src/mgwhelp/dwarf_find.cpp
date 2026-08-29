@@ -46,19 +46,24 @@ find_symbol_cbW(uint64_t addr,
                 void *context,
                 int columnno)
 {
+    auto info = (struct dwarf_symbol_info *)context;
+
     switch (lineno) {
     case DWST_BASE_ADDR:
     case DWST_NOT_FOUND:
-        break;
-
     case DWST_NO_DBG_SYM:
     case DWST_NO_SRC_FILE:
+    case DWST_LINE_ADDR:
+        break;
+
+    case DWST_FUNC_ADDR:
+        info->function_addr = addr;
         break;
 
     default:
-        auto info = (struct dwarf_symbol_info *)context;
         info->functionname = funcname;
-        info->offset_addr = addr;
+        if (addr)
+            info->offset_addr = addr - info->function_addr;
         return;
     }
 }
@@ -83,19 +88,24 @@ find_line_cbW(uint64_t addr,
               void *context,
               int columnno)
 {
+    auto info = (struct dwarf_line_info *)context;
+
     switch (lineno) {
     case DWST_BASE_ADDR:
     case DWST_NOT_FOUND:
-        break;
-
     case DWST_NO_DBG_SYM:
     case DWST_NO_SRC_FILE:
+    case DWST_FUNC_ADDR:
+        break;
+
+    case DWST_LINE_ADDR:
+        info->line_addr = addr;
         break;
 
     default:
-        auto info = (struct dwarf_line_info *)context;
         info->filename = filename ? filename : L"";
-        info->offset_addr = addr;
+        if (addr)
+            info->offset_addr = addr - info->line_addr;
         info->line = lineno;
         return;
     }

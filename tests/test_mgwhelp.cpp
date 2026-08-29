@@ -97,7 +97,8 @@ checkSymLine(HANDLE hProcess,
              const char *szSymbolName,
              const char *szFileName,
              DWORD dwLineNumber,
-             DWORD64 dwExpectDisplacement)
+             DWORD64 dwExpectDisplacement,
+             DWORD64 dwExpectLineDisplacement)
 {
     bool ok;
 
@@ -132,11 +133,11 @@ checkSymLine(HANDLE hProcess,
             test_diagnostic("LineNumber = %lu != %lu",
                             Line.LineNumber, dwLineNumber);
         }
-        ok = dwDisplacement == dwExpectDisplacement;
+        ok = dwDisplacement == dwExpectLineDisplacement;
         test_line(ok, "SymGetLineFromAddr64(&%s).Displacement", szSymbolName);
         if (!ok) {
             test_diagnostic("Displacement = %lx != %I64x",
-                            dwDisplacement, dwExpectDisplacement);
+                            dwDisplacement, dwExpectLineDisplacement);
         }
     }
 }
@@ -152,7 +153,7 @@ checkCaller(HANDLE hProcess,
 {
     void *addr = __builtin_return_address(0);
     DWORD64 displacement = (DWORD64)addr - (DWORD64)pvCaller;
-    checkSymLine(hProcess, addr, szSymbolName, szFileName, dwLineNumber, displacement);
+    checkSymLine(hProcess, addr, szSymbolName, szFileName, dwLineNumber, displacement, 0);
 }
 
 
@@ -203,7 +204,7 @@ main(int argc, char **argv)
     if (!ok) {
         test_diagnostic_last_error();
     } {
-        checkSymLine(hProcess, (PVOID)&foo, "foo", __FILE__, foo_line, 0);
+        checkSymLine(hProcess, (PVOID)&foo, "foo", __FILE__, foo_line, 0, 0);
 
         checkCaller(hProcess, (PVOID)&main, "main", __FILE__, __LINE__); LINE_BARRIER
 
