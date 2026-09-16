@@ -105,7 +105,7 @@ find_line_cbW(uint64_t addr,
     default:
         info->filename = filename ? filename : L"";
         if (addr)
-            info->offset_addr = addr - info->line_addr;
+            info->offset_addr = info->line_addr ? addr - info->line_addr : 0;
         info->line = lineno;
         return;
     }
