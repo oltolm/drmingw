@@ -21,6 +21,7 @@
 
 #include "dwarfstack.h"
 #include <string>
+#include <vector>
 
 #include <stdbool.h>
 
@@ -28,38 +29,23 @@
 #include <libdwarf.h>
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
-struct dwarf_symbol_info {
+struct dwarf_frame_info {
     std::string functionname;
     Dwarf_Addr function_addr = 0;
-    unsigned int offset_addr;
-};
+    unsigned int offset_addr = 0;
 
-struct dwarf_line_info {
     std::wstring filename;
     unsigned int line = 0;
     Dwarf_Addr line_addr = 0;
-    unsigned int offset_addr;
+    unsigned int line_offset_addr = 0;
 };
 
-bool
-dwarf_find_symbol(dwst_module *module,
-                  wchar_t *name,
-                  Dwarf_Addr image_base,
-                  Dwarf_Addr addr,
-                  struct dwarf_symbol_info *info);
-
-bool
-dwarf_find_line(dwst_module *module,
-                wchar_t *name,
-                Dwarf_Addr image_base,
-                Dwarf_Addr addr,
-                struct dwarf_line_info *info);
-
-#ifdef __cplusplus
-}
-#endif
+/*
+ * Find all frames for an address: the innermost inlined function first, and
+ * the function that physically contains the address last.  Callers of inlined
+ * functions report the line of the call site.
+ *
+ * Returns an empty vector if the address has no DWARF information.
+ */
+std::vector<dwarf_frame_info>
+dwarf_find_frames(dwst_module *module, wchar_t *name, Dwarf_Addr image_base, Dwarf_Addr addr);

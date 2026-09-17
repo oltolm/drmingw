@@ -82,3 +82,75 @@ MgwUnDecorateSymbolNameW(PCWSTR DecoratedName,
                          PWSTR UnDecoratedName,
                          DWORD UndecoratedLength,
                          DWORD Flags);
+
+EXTERN_C DWORD WINAPI
+MgwSymAddrIncludeInlineTrace(HANDLE hProcess, DWORD64 Address);
+
+EXTERN_C BOOL WINAPI
+MgwSymQueryInlineTrace(HANDLE hProcess,
+                       DWORD64 StartAddress,
+                       DWORD StartContext,
+                       DWORD64 StartRetAddress,
+                       DWORD64 CurAddress,
+                       LPDWORD CurContext,
+                       LPDWORD CurFrameIndex);
+
+EXTERN_C BOOL WINAPI
+MgwSymFromInlineContext(HANDLE hProcess,
+                        DWORD64 Address,
+                        ULONG InlineContext,
+                        PDWORD64 Displacement,
+                        PSYMBOL_INFO Symbol);
+
+EXTERN_C BOOL WINAPI
+MgwSymFromInlineContextW(HANDLE hProcess,
+                         DWORD64 Address,
+                         ULONG InlineContext,
+                         PDWORD64 Displacement,
+                         PSYMBOL_INFOW Symbol);
+
+EXTERN_C BOOL WINAPI
+MgwSymGetLineFromInlineContext(HANDLE hProcess,
+                               DWORD64 dwAddr,
+                               ULONG InlineContext,
+                               DWORD64 qwModuleBaseAddress,
+                               PDWORD pdwDisplacement,
+                               PIMAGEHLP_LINE64 Line);
+
+EXTERN_C BOOL WINAPI
+MgwSymGetLineFromInlineContextW(HANDLE hProcess,
+                                DWORD64 dwAddr,
+                                ULONG InlineContext,
+                                DWORD64 qwModuleBaseAddress,
+                                PDWORD pdwDisplacement,
+                                PIMAGEHLP_LINEW64 Line);
+
+
+// dbghelp inline frame functions, which mingw-w64's dbghelp.h doesn't declare.
+
+EXTERN_C DWORD WINAPI
+SymAddrIncludeInlineTrace(HANDLE hProcess, DWORD64 Address);
+
+EXTERN_C BOOL WINAPI
+SymQueryInlineTrace(HANDLE hProcess,
+                    DWORD64 StartAddress,
+                    DWORD StartContext,
+                    DWORD64 StartRetAddress,
+                    DWORD64 CurAddress,
+                    LPDWORD CurContext,
+                    LPDWORD CurFrameIndex);
+
+EXTERN_C BOOL WINAPI
+SymFromInlineContextW(HANDLE hProcess,
+                      DWORD64 Address,
+                      ULONG InlineContext,
+                      PDWORD64 Displacement,
+                      PSYMBOL_INFOW Symbol);
+
+EXTERN_C BOOL WINAPI
+SymGetLineFromInlineContextW(HANDLE hProcess,
+                             DWORD64 dwAddr,
+                             ULONG InlineContext,
+                             DWORD64 qwModuleBaseAddress,
+                             PDWORD pdwDisplacement,
+                             PIMAGEHLP_LINEW64 Line);

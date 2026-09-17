@@ -177,6 +177,124 @@ static const DWORD foo_line = __LINE__; static int foo(int a, int b) {
 #define LINE_BARRIER rand();
 
 
+// mingw-w64's dbghelp.h doesn't declare the inline frame functions
+EXTERN_C DWORD WINAPI
+SymAddrIncludeInlineTrace(HANDLE hProcess, DWORD64 Address);
+
+EXTERN_C BOOL WINAPI
+SymQueryInlineTrace(HANDLE hProcess,
+                    DWORD64 StartAddress,
+                    DWORD StartContext,
+                    DWORD64 StartRetAddress,
+                    DWORD64 CurAddress,
+                    LPDWORD CurContext,
+                    LPDWORD CurFrameIndex);
+
+EXTERN_C BOOL WINAPI
+SymFromInlineContext(HANDLE hProcess,
+                     DWORD64 Address,
+                     ULONG InlineContext,
+                     PDWORD64 Displacement,
+                     PSYMBOL_INFO Symbol);
+
+EXTERN_C BOOL WINAPI
+SymGetLineFromInlineContext(HANDLE hProcess,
+                            DWORD64 dwAddr,
+                            ULONG InlineContext,
+                            DWORD64 qwModuleBaseAddress,
+                            PDWORD pdwDisplacement,
+                            PIMAGEHLP_LINE64 Line);
+
+
+static void
+    __attribute__ ((noinline))
+checkInlined(HANDLE hProcess,
+             const char *szInlinedName,
+             DWORD dwInlinedLine,
+             const char *szCallerName,
+             DWORD dwCallerLine)
+{
+    bool ok;
+
+    if (g_bStripped) {
+        return;
+    }
+
+    // Point inside the call instruction, which belongs to the inlined function
+    DWORD64 dwAddr = (DWORD64)(UINT_PTR)__builtin_return_address(0) - 1;
+
+    DWORD dwInlineCount = SymAddrIncludeInlineTrace(hProcess, dwAddr);
+    test_line(dwInlineCount == 1, "SymAddrIncludeInlineTrace(&%s)", szInlinedName);
+    if (dwInlineCount != 1) {
+        test_diagnostic("InlineCount = %lu != 1", dwInlineCount);
+        return;
+    }
+
+    DWORD dwContext = 0;
+    DWORD dwFrameIndex = ~0UL;
+    ok = SymQueryInlineTrace(hProcess, dwAddr, 0, dwAddr, dwAddr, &dwContext, &dwFrameIndex);
+    test_line(ok && dwFrameIndex == 0, "SymQueryInlineTrace(&%s)", szInlinedName);
+    if (!ok) {
+        test_diagnostic_last_error();
+        return;
+    }
+
+    DWORD64 Displacement = -1;
+    struct {
+        SYMBOL_INFO Symbol;
+        CHAR Name[256];
+    } s;
+    memset(&s, 0, sizeof s);
+    s.Symbol.SizeOfStruct = sizeof s.Symbol;
+    s.Symbol.MaxNameLen = sizeof s.Symbol.Name + sizeof s.Name;
+    ok = SymFromInlineContext(hProcess, dwAddr, dwContext, &Displacement, &s.Symbol);
+    test_line(ok && strcmp(s.Symbol.Name, szInlinedName) == 0,
+              "SymFromInlineContext(&%s).Name", szInlinedName);
+    if (ok && strcmp(s.Symbol.Name, szInlinedName) != 0) {
+        test_diagnostic("Name = \"%s\" != \"%s\"", s.Symbol.Name, szInlinedName);
+    }
+
+    DWORD dwDisplacement;
+    IMAGEHLP_LINE64 Line;
+    ZeroMemory(&Line, sizeof Line);
+    Line.SizeOfStruct = sizeof Line;
+    ok = SymGetLineFromInlineContext(hProcess, dwAddr, dwContext, 0, &dwDisplacement, &Line);
+    test_line(ok && Line.LineNumber == dwInlinedLine,
+              "SymGetLineFromInlineContext(&%s).LineNumber", szInlinedName);
+    if (ok && Line.LineNumber != dwInlinedLine) {
+        test_diagnostic("LineNumber = %lu != %lu", Line.LineNumber, dwInlinedLine);
+    }
+
+    // The physical frame is the caller, at the call site of the inlined function
+    memset(&s, 0, sizeof s);
+    s.Symbol.SizeOfStruct = sizeof s.Symbol;
+    s.Symbol.MaxNameLen = sizeof s.Symbol.Name + sizeof s.Name;
+    ok = SymFromAddr(hProcess, dwAddr, &Displacement, &s.Symbol);
+    test_line(ok && strcmp(s.Symbol.Name, szCallerName) == 0,
+              "SymFromAddr(&%s).Name", szInlinedName);
+    if (ok && strcmp(s.Symbol.Name, szCallerName) != 0) {
+        test_diagnostic("Name = \"%s\" != \"%s\"", s.Symbol.Name, szCallerName);
+    }
+
+    ZeroMemory(&Line, sizeof Line);
+    Line.SizeOfStruct = sizeof Line;
+    ok = SymGetLineFromAddr64(hProcess, dwAddr, &dwDisplacement, &Line);
+    test_line(ok && Line.LineNumber == dwCallerLine,
+              "SymGetLineFromAddr64(&%s).LineNumber", szInlinedName);
+    if (ok && Line.LineNumber != dwCallerLine) {
+        test_diagnostic("LineNumber = %lu != %lu", Line.LineNumber, dwCallerLine);
+    }
+}
+
+
+static const DWORD inlined_line = __LINE__ + 4;
+static inline __attribute__ ((always_inline)) void
+inlined(HANDLE hProcess, DWORD dwCallerLine)
+{
+    checkInlined(hProcess, "inlined", inlined_line, "main", dwCallerLine);
+}
+
+
 int
 main(int argc, char **argv)
 {
@@ -207,6 +325,8 @@ main(int argc, char **argv)
         checkSymLine(hProcess, (PVOID)&foo, "foo", __FILE__, foo_line, 0, 0);
 
         checkCaller(hProcess, (PVOID)&main, "main", __FILE__, __LINE__); LINE_BARRIER
+
+        inlined(hProcess, __LINE__); LINE_BARRIER
 
         // Test DbgHelp fallback
         // XXX: Doesn't work reliably on Wine

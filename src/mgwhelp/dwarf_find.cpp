@@ -38,88 +38,67 @@
 #include <dwarf_arange.h>
 #include <dwarfstack.h>
 
+struct find_frames_context {
+    Dwarf_Addr addr;
+    Dwarf_Addr function_addr = 0;
+    Dwarf_Addr line_addr = 0;
+    std::vector<dwarf_frame_info> frames;
+};
+
+// dwarfstack reports DWST_FUNC_ADDR and DWST_LINE_ADDR (when known) before the
+// file/line of each frame, innermost inlined function first.
 static void
-find_symbol_cbW(uint64_t addr,
+find_frames_cbW(uint64_t addr,
                 const wchar_t *filename,
                 int lineno,
                 const char *funcname,
                 void *context,
                 int columnno)
 {
-    auto info = (struct dwarf_symbol_info *)context;
+    auto ctx = (struct find_frames_context *)context;
 
     switch (lineno) {
     case DWST_BASE_ADDR:
     case DWST_NOT_FOUND:
     case DWST_NO_DBG_SYM:
     case DWST_NO_SRC_FILE:
-    case DWST_LINE_ADDR:
         break;
 
     case DWST_FUNC_ADDR:
-        info->function_addr = addr;
-        break;
-
-    default:
-        info->functionname = funcname;
-        if (addr)
-            info->offset_addr = addr - info->function_addr;
-        return;
-    }
-}
-
-bool
-dwarf_find_symbol(dwst_module *module,
-                  wchar_t *name,
-                  Dwarf_Addr image_base,
-                  Dwarf_Addr addr,
-                  struct dwarf_symbol_info *info)
-{
-    *info = {};
-    dwstOfModuleW(module, name, image_base, &addr, 1, &find_symbol_cbW, info);
-    return !info->functionname.empty();
-}
-
-static void
-find_line_cbW(uint64_t addr,
-              const wchar_t *filename,
-              int lineno,
-              const char *funcname,
-              void *context,
-              int columnno)
-{
-    auto info = (struct dwarf_line_info *)context;
-
-    switch (lineno) {
-    case DWST_BASE_ADDR:
-    case DWST_NOT_FOUND:
-    case DWST_NO_DBG_SYM:
-    case DWST_NO_SRC_FILE:
-    case DWST_FUNC_ADDR:
+        ctx->function_addr = addr;
         break;
 
     case DWST_LINE_ADDR:
-        info->line_addr = addr;
+        ctx->line_addr = addr;
         break;
 
-    default:
-        info->filename = filename ? filename : L"";
-        if (addr)
-            info->offset_addr = info->line_addr ? addr - info->line_addr : 0;
-        info->line = lineno;
-        return;
+    default: {
+        dwarf_frame_info info;
+        info.functionname = funcname ? funcname : "";
+        info.function_addr = ctx->function_addr;
+        if (info.function_addr) {
+            info.offset_addr = ctx->addr - info.function_addr;
+        }
+        info.filename = filename ? filename : L"";
+        info.line = lineno;
+        info.line_addr = ctx->line_addr;
+        if (info.line_addr) {
+            info.line_offset_addr = ctx->addr - info.line_addr;
+        }
+        ctx->frames.push_back(std::move(info));
+
+        ctx->function_addr = 0;
+        ctx->line_addr = 0;
+        break;
+    }
     }
 }
 
-bool
-dwarf_find_line(dwst_module *module,
-                wchar_t *name,
-                Dwarf_Addr image_base,
-                Dwarf_Addr addr,
-                struct dwarf_line_info *info)
+std::vector<dwarf_frame_info>
+dwarf_find_frames(dwst_module *module, wchar_t *name, Dwarf_Addr image_base, Dwarf_Addr addr)
 {
-    *info = {};
-    dwstOfModuleW(module, name, image_base, &addr, 1, &find_line_cbW, info);
-
-    return !info->filename.empty();
+    struct find_frames_context ctx;
+    ctx.addr = addr;
+    dwstOfModuleW(module, name, image_base, &addr, 1, &find_frames_cbW, &ctx);
+    return std::move(ctx.frames);
 }

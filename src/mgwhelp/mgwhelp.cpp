@@ -28,6 +28,8 @@
 #include <windows.h>
 #include <psapi.h>
 
+#include <vector>
+
 #include "dwarfstack.h"
 #include "outdbg.h"
 
@@ -552,6 +554,30 @@ demangle(const char *mangled, DWORD Flags)
 }
 
 
+static void
+SymbolWToA(PSYMBOL_INFOW SymbolW, PSYMBOL_INFO Symbol)
+{
+    WideCharToMultiByte(CP_ACP, 0, SymbolW->Name, -1, Symbol->Name, Symbol->MaxNameLen, nullptr,
+                        nullptr);
+}
+
+
+static void
+LineWToA(PIMAGEHLP_LINEW64 LineW, PIMAGEHLP_LINE64 Line)
+{
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/ms681330.aspx
+    // states that SymGetLineFromAddrW64 "returns a pointer to a buffer
+    // that may be reused by another function" and that callers should be
+    // "sure to copy the data returned to another buffer immediately",
+    // therefore the static buffer should be safe.
+    static CHAR FileName[1024];
+    Line->FileName = FileName;
+    WideCharToMultiByte(CP_ACP, 0, LineW->FileName, -1, Line->FileName, sizeof(FileName), nullptr,
+                        nullptr);
+    Line->LineNumber = LineW->LineNumber;
+}
+
+
 BOOL WINAPI
 MgwSymFromAddr(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_INFO Symbol)
 {
@@ -560,8 +586,7 @@ MgwSymFromAddr(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_
     SymbolW->SizeOfStruct = sizeof *SymbolW;
     SymbolW->MaxNameLen = ((sizeof(buffer) - sizeof *SymbolW) / sizeof(WCHAR)) - 1;
     if (MgwSymFromAddrW(hProcess, Address, Displacement, SymbolW)) {
-        WideCharToMultiByte(CP_ACP, 0, SymbolW->Name, -1, Symbol->Name, Symbol->MaxNameLen, nullptr,
-                            nullptr);
+        SymbolWToA(SymbolW, Symbol);
         return TRUE;
     } else {
         return FALSE;
@@ -579,16 +604,48 @@ MgwSymGetLineFromAddr64(HANDLE hProcess,
     ZeroMemory(&LineW, sizeof LineW);
     LineW.SizeOfStruct = sizeof LineW;
     if (MgwSymGetLineFromAddrW64(hProcess, dwAddr, pdwDisplacement, &LineW)) {
-        // https://msdn.microsoft.com/en-us/library/windows/desktop/ms681330.aspx
-        // states that SymGetLineFromAddrW64 "returns a pointer to a buffer
-        // that may be reused by another function" and that callers should be
-        // "sure to copy the data returned to another buffer immediately",
-        // therefore the static buffer should be safe.
-        static CHAR FileName[1024];
-        Line->FileName = FileName;
-        WideCharToMultiByte(CP_ACP, 0, LineW.FileName, -1, Line->FileName, sizeof(FileName),
-                            nullptr, nullptr);
-        Line->LineNumber = LineW.LineNumber;
+        LineWToA(&LineW, Line);
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+
+BOOL WINAPI
+MgwSymFromInlineContext(HANDLE hProcess,
+                        DWORD64 Address,
+                        ULONG InlineContext,
+                        PDWORD64 Displacement,
+                        PSYMBOL_INFO Symbol)
+{
+    char buffer[1024];
+    PSYMBOL_INFOW SymbolW = (PSYMBOL_INFOW)buffer;
+    SymbolW->SizeOfStruct = sizeof *SymbolW;
+    SymbolW->MaxNameLen = ((sizeof(buffer) - sizeof *SymbolW) / sizeof(WCHAR)) - 1;
+    if (MgwSymFromInlineContextW(hProcess, Address, InlineContext, Displacement, SymbolW)) {
+        SymbolWToA(SymbolW, Symbol);
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+
+BOOL WINAPI
+MgwSymGetLineFromInlineContext(HANDLE hProcess,
+                               DWORD64 dwAddr,
+                               ULONG InlineContext,
+                               DWORD64 qwModuleBaseAddress,
+                               PDWORD pdwDisplacement,
+                               PIMAGEHLP_LINE64 Line)
+{
+    IMAGEHLP_LINEW64 LineW;
+    ZeroMemory(&LineW, sizeof LineW);
+    LineW.SizeOfStruct = sizeof LineW;
+    if (MgwSymGetLineFromInlineContextW(hProcess, dwAddr, InlineContext, qwModuleBaseAddress,
+                                        pdwDisplacement, &LineW)) {
+        LineWToA(&LineW, Line);
         return TRUE;
     } else {
         return FALSE;
@@ -650,37 +707,105 @@ MgwSymCleanup(HANDLE hProcess)
 // Unicode stubs
 
 
+/*
+ * Inline frame contexts.
+ *
+ * The Windows SDK lays them out as { BYTE FrameId; BYTE FrameType; WORD
+ * FrameSignature; }, but mingw-w64's dbghelp.h doesn't define that.  For DWARF
+ * modules the frame id is the index into dwarf_find_frames(), so callers can
+ * increment the context to walk out from the innermost inlined function.
+ */
+#define MGW_STACK_FRAME_TYPE_INLINE 0x02
+
+static inline bool
+isInlineContext(ULONG InlineContext)
+{
+    return ((InlineContext >> 8) & 0xff) == MGW_STACK_FRAME_TYPE_INLINE;
+}
+
+static inline DWORD
+inlineContextFrameIndex(ULONG InlineContext)
+{
+    return InlineContext & 0xff;
+}
+
+static inline ULONG
+makeInlineContext(DWORD FrameIndex)
+{
+    return (MGW_STACK_FRAME_TYPE_INLINE << 8) | FrameIndex;
+}
+
+
+static std::vector<dwarf_frame_info>
+mgwhelp_find_frames(HANDLE hProcess, DWORD64 Address)
+{
+    DWORD64 Offset;
+    mgwhelp_module *module = mgwhelp_find_module(hProcess, Address, &Offset);
+
+    if (!module || !module->dwarf) {
+        return {};
+    }
+    return dwarf_find_frames(module->dwarf, module->LoadedImageName, module->Base, Address);
+}
+
+
+static BOOL
+dwarf_fill_symbol(const dwarf_frame_info &frame, PDWORD64 Displacement, PSYMBOL_INFOW Symbol)
+{
+    if (frame.functionname.empty()) {
+        return FALSE;
+    }
+
+    const char *name = frame.functionname.c_str();
+    if (SymGetOptions() & SYMOPT_UNDNAME) {
+        char *output_buffer = demangle(name, UNDNAME_NAME_ONLY);
+        if (output_buffer) {
+            name = output_buffer;
+        }
+    }
+    Symbol->NameLen = MultiByteToWideChar(CP_UTF8, 0, name, -1, Symbol->Name, Symbol->MaxNameLen);
+    if (name != frame.functionname.c_str()) {
+        free((void *)name);
+    }
+    if (Displacement) {
+        *Displacement = frame.offset_addr;
+    }
+    return TRUE;
+}
+
+
+static BOOL
+dwarf_fill_line(const dwarf_frame_info &frame, PDWORD pdwDisplacement, PIMAGEHLP_LINEW64 Line)
+{
+    if (frame.filename.empty()) {
+        return FALSE;
+    }
+
+    static wchar_t buf[1024];
+    Line->FileName = buf;
+    wcsncpy(buf, frame.filename.c_str(), _countof(buf));
+    Line->LineNumber = frame.line;
+
+    if (pdwDisplacement) {
+        *pdwDisplacement = frame.line_offset_addr;
+    }
+    return TRUE;
+}
+
+
 BOOL WINAPI
 MgwSymFromAddrW(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_INFOW Symbol)
 {
     DWORD dwOptions = SymGetOptions();
 
     // search DWARF symbols first, since we support modules without .debug_aranges
+    std::vector<dwarf_frame_info> frames = mgwhelp_find_frames(hProcess, Address);
+    if (!frames.empty() && dwarf_fill_symbol(frames.back(), Displacement, Symbol)) {
+        return TRUE;
+    }
+
     DWORD64 Offset;
     mgwhelp_module *module = mgwhelp_find_module(hProcess, Address, &Offset);
-
-    if (module && module->dwarf) {
-        struct dwarf_symbol_info info = {};
-        if (dwarf_find_symbol(module->dwarf, module->LoadedImageName, module->Base, Address,
-                              &info)) {
-            const char *name = info.functionname.c_str();
-            if (dwOptions & SYMOPT_UNDNAME) {
-                char *output_buffer = demangle(name, UNDNAME_NAME_ONLY);
-                if (output_buffer) {
-                    name = output_buffer;
-                }
-            }
-            Symbol->NameLen =
-                MultiByteToWideChar(CP_UTF8, 0, name, -1, Symbol->Name, Symbol->MaxNameLen);
-            if (name != info.functionname.c_str()) {
-                free((void *)name);
-            }
-            if (Displacement) {
-                *Displacement = info.offset_addr;
-            }
-            return TRUE;
-        }
-    }
 
     if (module && module->lpFileBase) {
         char symbol_name[1024];
@@ -711,22 +836,9 @@ MgwSymGetLineFromAddrW64(HANDLE hProcess,
                          PDWORD pdwDisplacement,
                          PIMAGEHLP_LINEW64 Line)
 {
-    DWORD64 Offset;
-    mgwhelp_module *module = mgwhelp_find_module(hProcess, dwAddr, &Offset);
-
-    if (module && module->dwarf) {
-        struct dwarf_line_info info = {};
-        if (dwarf_find_line(module->dwarf, module->LoadedImageName, module->Base, dwAddr, &info)) {
-            static wchar_t buf[1024];
-            Line->FileName = buf;
-            wcsncpy(buf, info.filename.c_str(), _countof(buf));
-            Line->LineNumber = info.line;
-
-            if (pdwDisplacement) {
-                *pdwDisplacement = info.offset_addr;
-            }
-            return TRUE;
-        }
+    std::vector<dwarf_frame_info> frames = mgwhelp_find_frames(hProcess, dwAddr);
+    if (!frames.empty() && dwarf_fill_line(frames.back(), pdwDisplacement, Line)) {
+        return TRUE;
     }
 
     return SymGetLineFromAddrW64(hProcess, dwAddr, pdwDisplacement, Line);
@@ -754,4 +866,102 @@ MgwUnDecorateSymbolNameW(PCWSTR DecoratedName,
     }
 
     return UnDecorateSymbolNameW(DecoratedName, UnDecoratedName, UndecoratedLength, Flags);
+}
+
+
+DWORD WINAPI
+MgwSymAddrIncludeInlineTrace(HANDLE hProcess, DWORD64 Address)
+{
+    std::vector<dwarf_frame_info> frames = mgwhelp_find_frames(hProcess, Address);
+    if (!frames.empty()) {
+        return frames.size() - 1;
+    }
+
+    return SymAddrIncludeInlineTrace(hProcess, Address);
+}
+
+
+BOOL WINAPI
+MgwSymQueryInlineTrace(HANDLE hProcess,
+                       DWORD64 StartAddress,
+                       DWORD StartContext,
+                       DWORD64 StartRetAddress,
+                       DWORD64 CurAddress,
+                       LPDWORD CurContext,
+                       LPDWORD CurFrameIndex)
+{
+    std::vector<dwarf_frame_info> frames = mgwhelp_find_frames(hProcess, CurAddress);
+    if (!frames.empty()) {
+        DWORD InlineCount = frames.size() - 1;
+        if (InlineCount == 0) {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+
+        // Keep the start context's frame when it refers to the same address.
+        DWORD FrameIndex = 0;
+        if (CurAddress == StartAddress && isInlineContext(StartContext) &&
+            inlineContextFrameIndex(StartContext) < InlineCount) {
+            FrameIndex = inlineContextFrameIndex(StartContext);
+        }
+
+        *CurContext = makeInlineContext(FrameIndex);
+        *CurFrameIndex = FrameIndex;
+        return TRUE;
+    }
+
+    return SymQueryInlineTrace(hProcess, StartAddress, StartContext, StartRetAddress, CurAddress,
+                               CurContext, CurFrameIndex);
+}
+
+
+BOOL WINAPI
+MgwSymFromInlineContextW(HANDLE hProcess,
+                         DWORD64 Address,
+                         ULONG InlineContext,
+                         PDWORD64 Displacement,
+                         PSYMBOL_INFOW Symbol)
+{
+    if (!isInlineContext(InlineContext)) {
+        return MgwSymFromAddrW(hProcess, Address, Displacement, Symbol);
+    }
+
+    std::vector<dwarf_frame_info> frames = mgwhelp_find_frames(hProcess, Address);
+    if (!frames.empty()) {
+        DWORD FrameIndex = inlineContextFrameIndex(InlineContext);
+        if (FrameIndex >= frames.size() - 1) {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        return dwarf_fill_symbol(frames[FrameIndex], Displacement, Symbol);
+    }
+
+    return SymFromInlineContextW(hProcess, Address, InlineContext, Displacement, Symbol);
+}
+
+
+BOOL WINAPI
+MgwSymGetLineFromInlineContextW(HANDLE hProcess,
+                                DWORD64 dwAddr,
+                                ULONG InlineContext,
+                                DWORD64 qwModuleBaseAddress,
+                                PDWORD pdwDisplacement,
+                                PIMAGEHLP_LINEW64 Line)
+{
+    if (!isInlineContext(InlineContext)) {
+        return MgwSymGetLineFromAddrW64(hProcess, dwAddr, pdwDisplacement, Line);
+    }
+
+    std::vector<dwarf_frame_info> frames = mgwhelp_find_frames(hProcess, dwAddr);
+    if (!frames.empty()) {
+        DWORD FrameIndex = inlineContextFrameIndex(InlineContext);
+        if (FrameIndex >= frames.size() - 1) {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        return dwarf_fill_line(frames[FrameIndex], pdwDisplacement, Line);
+    }
+
+    return SymGetLineFromInlineContextW(hProcess, dwAddr, InlineContext, qwModuleBaseAddress,
+                                        pdwDisplacement, Line);
 }

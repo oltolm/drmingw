@@ -11,6 +11,12 @@ EXPORTS
         SymLoadModuleExW = MgwSymLoadModuleExW
         UnDecorateSymbolName = MgwUnDecorateSymbolName
         UnDecorateSymbolNameW = MgwUnDecorateSymbolNameW
+	SymAddrIncludeInlineTrace = MgwSymAddrIncludeInlineTrace
+	SymQueryInlineTrace = MgwSymQueryInlineTrace
+	SymFromInlineContext = MgwSymFromInlineContext
+	SymFromInlineContextW = MgwSymFromInlineContextW
+	SymGetLineFromInlineContext = MgwSymGetLineFromInlineContext
+	SymGetLineFromInlineContextW = MgwSymGetLineFromInlineContextW
 
 	EnumDirTree
 	EnumDirTreeW

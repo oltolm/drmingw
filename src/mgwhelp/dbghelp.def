@@ -30,6 +30,7 @@ StackWalk
 StackWalk64
 SymAddSymbol
 SymAddSymbolW
+SymAddrIncludeInlineTrace
 SymCleanup
 SymEnumLines
 SymEnumSourceFiles
@@ -45,11 +46,15 @@ SymEnumerateSymbols64
 SymFindFileInPath
 SymFindFileInPathW
 SymFromAddrW
+SymFromInlineContext
+SymFromInlineContextW
 SymFromName
 SymFunctionTableAccess
 SymFunctionTableAccess64
 SymGetLineFromAddr
 SymGetLineFromAddrW64
+SymGetLineFromInlineContext
+SymGetLineFromInlineContextW
 SymGetLineNext
 SymGetLineNext64
 SymGetLinePrev
@@ -84,6 +89,7 @@ SymLoadModuleExW
 SymMatchFileName
 SymMatchFileNameW
 SymMatchString
+SymQueryInlineTrace
 SymRefreshModuleList
 SymRegisterCallback
 SymRegisterCallback64
