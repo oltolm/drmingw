@@ -30,6 +30,7 @@ EXPORTS
 	StackWalk64@36
 	SymAddSymbol@32
 	SymAddSymbolW@32
+	SymAddrIncludeInlineTrace@12
 	SymCleanup@4
 	SymEnumLines@28
 	SymEnumSourceFiles@24
@@ -46,12 +47,16 @@ EXPORTS
 	SymFindFileInPathW@40
 	SymFromAddr@20
 	SymFromAddrW@20
+	SymFromInlineContext@24
+	SymFromInlineContextW@24
 	SymFromName@12
 	SymFunctionTableAccess@8
 	SymFunctionTableAccess64@12
 	SymGetLineFromAddr@16
 	SymGetLineFromAddr64@20
 	SymGetLineFromAddrW64@20
+	SymGetLineFromInlineContext@32
+	SymGetLineFromInlineContextW@32
 	SymGetLineNext@8
 	SymGetLineNext64@8
 	SymGetLinePrev@8
@@ -86,6 +91,7 @@ EXPORTS
 	SymMatchFileName@16
 	SymMatchFileNameW@16
 	SymMatchString@12
+	SymQueryInlineTrace@40
 	SymRefreshModuleList@4
 	SymRegisterCallback@12
 	SymRegisterCallback64@16
