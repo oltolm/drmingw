@@ -81,6 +81,12 @@ checkSym(HANDLE hProcess,
             test_diagnostic("Name = \"%s\" != \"%s\"",
                             s.Symbol.Name, szSymbolName);
         }
+        ok = s.Symbol.NameLen == strlen(s.Symbol.Name);
+        test_line(ok, "SymFromAddr(&%s).NameLen", szSymbolName);
+        if (!ok) {
+            test_diagnostic("NameLen = %lu != %u",
+                            s.Symbol.NameLen, (unsigned)strlen(s.Symbol.Name));
+        }
         ok = Displacement == dwExpectDisplacement;
         test_line(ok, "SymFromAddr(&%s).Displacement", szSymbolName);
         if (!ok) {

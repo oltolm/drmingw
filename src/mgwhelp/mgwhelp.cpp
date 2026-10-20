@@ -557,8 +557,51 @@ demangle(const char *mangled, DWORD Flags)
 static void
 SymbolWToA(PSYMBOL_INFOW SymbolW, PSYMBOL_INFO Symbol)
 {
-    WideCharToMultiByte(CP_ACP, 0, SymbolW->Name, -1, Symbol->Name, Symbol->MaxNameLen, nullptr,
-                        nullptr);
+    // Everything but the name, which is converted.
+    Symbol->TypeIndex = SymbolW->TypeIndex;
+    Symbol->Size = SymbolW->Size;
+    Symbol->ModBase = SymbolW->ModBase;
+    Symbol->Flags = SymbolW->Flags;
+    Symbol->Value = SymbolW->Value;
+    Symbol->Address = SymbolW->Address;
+    Symbol->Register = SymbolW->Register;
+    Symbol->Scope = SymbolW->Scope;
+    Symbol->Tag = SymbolW->Tag;
+
+    Symbol->NameLen = 0;
+    if (Symbol->MaxNameLen == 0) {
+        return;
+    }
+
+    // NameLen, as dbghelp's, does not count the terminator. A name too
+    // long for the buffer is cut short, and still terminated.
+    int n = WideCharToMultiByte(CP_ACP, 0, SymbolW->Name, -1, Symbol->Name, Symbol->MaxNameLen,
+                                nullptr, nullptr);
+    if (n > 0) {
+        Symbol->NameLen = n - 1;
+    } else {
+        Symbol->Name[Symbol->MaxNameLen - 1] = '\0';
+        Symbol->NameLen = (ULONG)strlen(Symbol->Name);
+    }
+}
+
+
+/// Set Symbol's name, and NameLen without the terminator, as dbghelp does.
+static void
+SymbolSetNameW(PSYMBOL_INFOW Symbol, UINT CodePage, const char *name)
+{
+    Symbol->NameLen = 0;
+    if (Symbol->MaxNameLen == 0) {
+        return;
+    }
+
+    int n = MultiByteToWideChar(CodePage, 0, name, -1, Symbol->Name, Symbol->MaxNameLen);
+    if (n > 0) {
+        Symbol->NameLen = n - 1;
+    } else {
+        Symbol->Name[Symbol->MaxNameLen - 1] = L'\0';
+        Symbol->NameLen = (ULONG)wcslen(Symbol->Name);
+    }
 }
 
 
@@ -581,7 +624,7 @@ LineWToA(PIMAGEHLP_LINEW64 LineW, PIMAGEHLP_LINE64 Line)
 BOOL WINAPI
 MgwSymFromAddr(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_INFO Symbol)
 {
-    char buffer[1024];
+    char buffer[1024] = {};
     PSYMBOL_INFOW SymbolW = (PSYMBOL_INFOW)buffer;
     SymbolW->SizeOfStruct = sizeof *SymbolW;
     SymbolW->MaxNameLen = ((sizeof(buffer) - sizeof *SymbolW) / sizeof(WCHAR)) - 1;
@@ -619,7 +662,7 @@ MgwSymFromInlineContext(HANDLE hProcess,
                         PDWORD64 Displacement,
                         PSYMBOL_INFO Symbol)
 {
-    char buffer[1024];
+    char buffer[1024] = {};
     PSYMBOL_INFOW SymbolW = (PSYMBOL_INFOW)buffer;
     SymbolW->SizeOfStruct = sizeof *SymbolW;
     SymbolW->MaxNameLen = ((sizeof(buffer) - sizeof *SymbolW) / sizeof(WCHAR)) - 1;
@@ -763,7 +806,7 @@ dwarf_fill_symbol(const dwarf_frame_info &frame, PDWORD64 Displacement, PSYMBOL_
             name = output_buffer;
         }
     }
-    Symbol->NameLen = MultiByteToWideChar(CP_UTF8, 0, name, -1, Symbol->Name, Symbol->MaxNameLen);
+    SymbolSetNameW(Symbol, CP_UTF8, name);
     if (name != frame.functionname.c_str()) {
         free((void *)name);
     }
@@ -817,8 +860,7 @@ MgwSymFromAddrW(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL
                     name = output_buffer;
                 }
             }
-            Symbol->NameLen =
-                MultiByteToWideChar(CP_ACP, 0, name, -1, Symbol->Name, Symbol->MaxNameLen);
+            SymbolSetNameW(Symbol, CP_ACP, name);
             if (name != symbol_name) {
                 free((void *)name);
             }
